@@ -4,6 +4,8 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>MetalLens uses the camera to capture metal surfaces for on-device flaw analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MetalLens uses selected photos for on-device metal condition analysis.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

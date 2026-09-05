@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart' as image_picker;
 
 import '../data/mock_data.dart';
 import '../models/inference_result.dart';
@@ -25,6 +27,7 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen>
     with WidgetsBindingObserver {
   final MetalClassifier _classifier = MetalClassifier();
+  final image_picker.ImagePicker _imagePicker = image_picker.ImagePicker();
   CameraController? _camera;
   bool _flashOn = false;
   bool _capturing = false;
@@ -32,6 +35,7 @@ class _ScannerScreenState extends State<ScannerScreen>
   String? _cameraError;
   String? _inferenceError;
   InferenceResult? _latestResult;
+  Uint8List? _galleryPreview;
 
   @override
   void initState() {
@@ -109,7 +113,7 @@ class _ScannerScreenState extends State<ScannerScreen>
       }
     } catch (error) {
       if (mounted) {
-        setState(() => _inferenceError = 'Model could not be loaded: $error');
+        setState(() => _inferenceError = 'Inspection pipeline failed: $error');
       }
     }
   }
@@ -125,10 +129,71 @@ class _ScannerScreenState extends State<ScannerScreen>
       _showMessage(_cameraError ?? 'Camera is not ready yet.');
       return;
     }
+    setState(() {
+      _capturing = true;
+      _inferenceError = null;
+    });
+    try {
+      final picture = await camera.takePicture();
+      final bytes = await picture.readAsBytes();
+      if (mounted) setState(() => _galleryPreview = null);
+      await _analyzeImage(
+        bytes,
+        ScanImageSource.camera,
+        alreadyBusy: true,
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _inferenceError = 'Analysis failed: $error');
+        _showMessage(
+            'Analysis failed. Check the camera and model, then retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    if (_capturing) return;
+    setState(() {
+      _capturing = true;
+      _inferenceError = null;
+    });
+    try {
+      final selected = await _imagePicker.pickImage(
+        source: image_picker.ImageSource.gallery,
+        requestFullMetadata: false,
+      );
+      if (selected == null) return;
+      final bytes = await selected.readAsBytes();
+      if (!mounted) return;
+      setState(() => _galleryPreview = bytes);
+      await _analyzeImage(
+        bytes,
+        ScanImageSource.gallery,
+        alreadyBusy: true,
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _inferenceError = 'Gallery import failed: $error');
+        _showMessage('Could not open or analyze that image.');
+      }
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  Future<void> _analyzeImage(
+    Uint8List bytes,
+    ScanImageSource source, {
+    bool alreadyBusy = false,
+  }) async {
+    if (_capturing && !alreadyBusy) return;
     if (!_modelReady) {
       await _initializeModel();
       if (!_modelReady) {
-        _showMessage(_inferenceError ?? 'The ONNX model is not ready.');
+        _showMessage(
+            _inferenceError ?? 'The inspection pipeline is not ready.');
         return;
       }
     }
@@ -137,16 +202,16 @@ class _ScannerScreenState extends State<ScannerScreen>
       _inferenceError = null;
     });
     try {
-      final picture = await camera.takePicture();
-      final bytes = await picture.readAsBytes();
-      final result = await _classifier.analyze(bytes);
+      final result = await _classifier.analyze(bytes, source: source);
       if (!mounted) return;
       setState(() => _latestResult = result);
+      if (!result.isMetal) {
+        _showMessage('This image was not identified as metal.');
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _inferenceError = 'Analysis failed: $error');
-        _showMessage(
-            'Analysis failed. Check the camera and model, then retry.');
+        _showMessage('Analysis failed. Check the selected image and models.');
       }
     } finally {
       if (mounted) setState(() => _capturing = false);
@@ -185,12 +250,32 @@ class _ScannerScreenState extends State<ScannerScreen>
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String get _scanStatusText {
+    if (_capturing) return 'Checking material and condition…';
+    if (!_modelReady) return 'Loading inspection pipeline…';
+    final result = _latestResult;
+    if (result == null) {
+      return _galleryPreview == null
+          ? 'Tap anywhere or press the button to scan'
+          : 'Gallery image ready to analyze';
+    }
+    if (!result.isMetal) return 'Not identified as metal';
+    final prediction = result.prediction!;
+    return '${prediction.label} · ${(prediction.probability * 100).round()}%';
+  }
+
   Future<void> _showResult(InferenceResult result) =>
       showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
-        builder: (context) => _InferenceResultSheet(result: result),
+        builder: (context) => _InferenceResultSheet(
+          result: result,
+          onRescan: () {
+            Navigator.pop(context);
+            unawaited(_analyzeImage(result.capturedImage, result.source));
+          },
+        ),
       );
 
   @override
@@ -206,6 +291,7 @@ class _ScannerScreenState extends State<ScannerScreen>
               children: [
                 _CameraBackground(
                   controller: _camera,
+                  galleryImage: _galleryPreview,
                   error: _cameraError,
                   onRetry: _initializeCamera,
                 ),
@@ -242,7 +328,7 @@ class _ScannerScreenState extends State<ScannerScreen>
                               SizedBox(
                                 height: constraints.maxHeight < 680 ? 12 : 42,
                               ),
-                              const _ScanMode(),
+                              _ScanMode(fromGallery: _galleryPreview != null),
                               const Spacer(),
                               _FocusGuide(
                                 height: constraints.maxHeight < 680 ? 178 : 232,
@@ -253,20 +339,15 @@ class _ScannerScreenState extends State<ScannerScreen>
                               AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 180),
                                 child: Text(
-                                  _capturing
-                                      ? 'Analyzing on device…'
-                                      : _cameraError != null
-                                          ? 'Camera setup required'
-                                          : !_modelReady
-                                              ? 'Loading inspection model…'
-                                              : _latestResult == null
-                                                  ? 'Tap anywhere or press the button to scan'
-                                                  : '${_latestResult!.prediction.label} · ${(_latestResult!.prediction.probability * 100).round()}%',
+                                  _cameraError != null &&
+                                          _galleryPreview == null
+                                      ? 'Camera setup required — gallery is available'
+                                      : _scanStatusText,
                                   key: ValueKey((
                                     _capturing,
                                     _cameraError,
                                     _modelReady,
-                                    _latestResult?.prediction.label,
+                                    _latestResult?.prediction?.label,
                                   )),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
@@ -286,10 +367,12 @@ class _ScannerScreenState extends State<ScannerScreen>
                               const Spacer(),
                               _CaptureControls(
                                 onCapture: _capture,
+                                onGallery: _pickFromGallery,
                                 enabled: !_capturing && _camera != null,
+                                galleryEnabled: !_capturing,
                               ),
                               SizedBox(
-                                height: constraints.maxHeight < 680 ? 96 : 154,
+                                height: constraints.maxHeight < 680 ? 156 : 224,
                               ),
                             ],
                           ),
@@ -476,7 +559,8 @@ class _TopBar extends StatelessWidget {
 }
 
 class _ScanMode extends StatelessWidget {
-  const _ScanMode();
+  const _ScanMode({required this.fromGallery});
+  final bool fromGallery;
   @override
   Widget build(BuildContext context) => Container(
         constraints: BoxConstraints(
@@ -492,18 +576,24 @@ class _ScanMode extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.layers_outlined, color: Colors.white, size: 18),
+              Icon(
+                fromGallery
+                    ? Icons.photo_library_outlined
+                    : Icons.layers_outlined,
+                color: Colors.white,
+                size: 18,
+              ),
               const SizedBox(width: 8),
-              const Text(
-                'Surface scan',
-                style: TextStyle(
+              Text(
+                fromGallery ? 'Gallery rescan' : 'Surface scan',
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                '· ${MockData.flawClasses.length} flaws',
+                '· ${MockData.flawClasses.length} conditions',
                 style: TextStyle(color: Colors.white.withValues(alpha: .65)),
               ),
             ],
@@ -567,9 +657,16 @@ class _FocusPainter extends CustomPainter {
 }
 
 class _CaptureControls extends StatelessWidget {
-  const _CaptureControls({required this.onCapture, required this.enabled});
+  const _CaptureControls({
+    required this.onCapture,
+    required this.onGallery,
+    required this.enabled,
+    required this.galleryEnabled,
+  });
   final VoidCallback onCapture;
+  final VoidCallback onGallery;
   final bool enabled;
+  final bool galleryEnabled;
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 26),
@@ -579,9 +676,7 @@ class _CaptureControls extends StatelessWidget {
             _CircleAction(
               icon: Icons.image_outlined,
               label: 'Choose an image',
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Gallery integration point')),
-              ),
+              onTap: galleryEnabled ? onGallery : null,
             ),
             Semantics(
               button: true,
@@ -637,16 +732,26 @@ class _CaptureControls extends StatelessWidget {
 class _CameraBackground extends StatelessWidget {
   const _CameraBackground({
     required this.controller,
+    required this.galleryImage,
     required this.error,
     required this.onRetry,
   });
 
   final CameraController? controller;
+  final Uint8List? galleryImage;
   final String? error;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
+    final selectedImage = galleryImage;
+    if (selectedImage != null) {
+      return Image.memory(
+        selectedImage,
+        fit: BoxFit.cover,
+        semanticLabel: 'Selected gallery image',
+      );
+    }
     final camera = controller;
     if (camera != null && camera.value.isInitialized) {
       return ColoredBox(
@@ -722,14 +827,31 @@ class _CameraBackground extends StatelessWidget {
 }
 
 class _InferenceResultSheet extends StatelessWidget {
-  const _InferenceResultSheet({required this.result});
+  const _InferenceResultSheet({required this.result, required this.onRescan});
 
   final InferenceResult result;
+  final VoidCallback onRescan;
 
   @override
   Widget build(BuildContext context) {
     final prediction = result.prediction;
+    final notMetal = !result.isMetal;
     final isReview = result.status == InspectionStatus.review;
+    final isPass = result.status == InspectionStatus.pass;
+    final statusColor = notMetal
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : isReview
+            ? AppTokens.review
+            : isPass
+                ? AppTokens.pass
+                : AppTokens.defect;
+    final statusLabel = notMetal
+        ? 'Not a metal surface'
+        : isReview
+            ? 'Needs review'
+            : isPass
+                ? 'Factory-new surface'
+                : 'Condition detected';
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
@@ -755,22 +877,26 @@ class _InferenceResultSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isReview ? 'Needs review' : 'Defect predicted',
+                        statusLabel,
                         style: TextStyle(
-                          color: isReview ? AppTokens.review : AppTokens.defect,
+                          color: statusColor,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        prediction.label,
+                        prediction?.label ?? 'Condition analysis skipped',
                         style: const TextStyle(
                           fontSize: 23,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       Text(
-                        '${(prediction.probability * 100).toStringAsFixed(1)}% confidence · ${result.inferenceTime.inMilliseconds} ms',
+                        prediction == null
+                            ? result.material.usesMock
+                                ? 'Material gate mock mode'
+                                : '${(result.material.confidence * 100).toStringAsFixed(1)}% material confidence'
+                            : '${(prediction.probability * 100).toStringAsFixed(1)}% confidence · ${result.inferenceTime.inMilliseconds} ms',
                         style: TextStyle(
                           color: Theme.of(context)
                               .colorScheme
@@ -785,10 +911,17 @@ class _InferenceResultSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Five-class probabilities',
-              style: TextStyle(fontWeight: FontWeight.w800),
+            Text(
+              notMetal ? 'Condition pipeline' : 'Four-class probabilities',
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
+            if (notMetal)
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text(
+                  'Condition classification was skipped because the material gate rejected the image.',
+                ),
+              ),
             ...result.scores.map(
               (score) => Padding(
                 padding: const EdgeInsets.only(top: 11),
@@ -833,14 +966,15 @@ class _InferenceResultSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: (isReview ? AppTokens.review : AppTokens.accent)
-                    .withValues(alpha: .1),
+                color: statusColor.withValues(alpha: .1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                isReview
-                    ? 'Confidence is below ${(ModelConfig.reviewThreshold * 100).round()}%. Keep this result for manual review.'
-                    : 'This is a model prediction, not a guaranteed finding. Confirm it during inspection.',
+                result.usesAnyMock
+                    ? 'Mock mode is active because one or both new ONNX files are absent. Use this result only to test the workflow.'
+                    : isReview
+                        ? 'Confidence is below ${(ModelConfig.reviewThreshold * 100).round()}%. Keep this result for manual review.'
+                        : 'This is a model prediction, not a guaranteed finding. Confirm it during inspection.',
                 style: const TextStyle(fontSize: 12),
               ),
             ),
@@ -848,9 +982,17 @@ class _InferenceResultSheet extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.camera_alt_outlined),
-                label: const Text('Scan another surface'),
+                onPressed: onRescan,
+                icon: Icon(
+                  result.source == ScanImageSource.gallery
+                      ? Icons.refresh_rounded
+                      : Icons.camera_alt_outlined,
+                ),
+                label: Text(
+                  result.source == ScanImageSource.gallery
+                      ? 'Analyze this gallery image again'
+                      : 'Analyze this capture again',
+                ),
               ),
             ),
           ],
@@ -869,15 +1011,23 @@ class _LatestAnalysisCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prediction = result.prediction;
+    final notMetal = !result.isMetal;
     final review = result.status == InspectionStatus.review;
+    final pass = result.status == InspectionStatus.pass;
+    final color = notMetal
+        ? Colors.blueGrey
+        : review
+            ? AppTokens.review
+            : pass
+                ? AppTokens.pass
+                : AppTokens.defect;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xD9191E22),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: (review ? AppTokens.review : AppTokens.defect)
-              .withValues(alpha: .45),
+          color: color.withValues(alpha: .45),
         ),
       ),
       child: Column(
@@ -886,10 +1036,14 @@ class _LatestAnalysisCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                review
-                    ? Icons.help_outline_rounded
-                    : Icons.error_outline_rounded,
-                color: review ? AppTokens.review : AppTokens.defect,
+                notMetal
+                    ? Icons.block_rounded
+                    : review
+                        ? Icons.help_outline_rounded
+                        : pass
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.error_outline_rounded,
+                color: color,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -897,15 +1051,21 @@ class _LatestAnalysisCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      review ? 'Needs review' : 'Defect predicted',
+                      notMetal
+                          ? 'Not metal'
+                          : review
+                              ? 'Needs review'
+                              : pass
+                                  ? 'Pass'
+                                  : 'Condition detected',
                       style: TextStyle(
-                        color: review ? AppTokens.review : AppTokens.defect,
+                        color: color,
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
                       ),
                     ),
                     Text(
-                      prediction.label,
+                      prediction?.label ?? 'Condition analysis skipped',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -916,7 +1076,9 @@ class _LatestAnalysisCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${(prediction.probability * 100).toStringAsFixed(1)}%',
+                prediction == null
+                    ? '—'
+                    : '${(prediction.probability * 100).toStringAsFixed(1)}%',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -930,7 +1092,7 @@ class _LatestAnalysisCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'On-device ONNX · ${result.inferenceTime.inMilliseconds} ms',
+                  '${result.source == ScanImageSource.gallery ? 'Gallery' : 'Camera'} · ${result.usesAnyMock ? 'Mock pipeline' : 'On-device ONNX'} · ${result.inferenceTime.inMilliseconds} ms',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: .62),
                     fontSize: 11,
@@ -957,7 +1119,7 @@ class _CircleAction extends StatelessWidget {
   });
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => IconButton.filled(
         onPressed: onTap,

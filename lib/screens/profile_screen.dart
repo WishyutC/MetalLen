@@ -101,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             const Text(
-                              'Metal CNN · 5 flaw classes · Ready',
+                              'Two-stage CNN · 4 conditions · Mock-ready',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
@@ -124,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
             subtitle: const Text(
-              'Interface readiness only · no live inference',
+              'Material gate, then condition classification',
               style: TextStyle(fontSize: 11),
             ),
             children: MockData.flawClasses

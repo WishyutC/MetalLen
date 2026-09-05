@@ -22,15 +22,16 @@ flutter run
 ## Assumptions
 
 - Scanner is the initial destination and no separate Home screen exists.
-- Camera capture and CNN inference run on device. Gallery import, export, persistent settings, history storage, and backend synchronization remain integration points.
+- Camera capture and gallery selection share an on-device two-stage inspection pipeline. Export, persistent settings, history storage, and backend synchronization remain integration points.
 - `Pass`, `Defect`, and `Review` are application result states—not CNN classes.
-- The CNN class list remains exactly: Rolled pit, Inclusion, Silk spot, Deburring, and Waist folding.
+- The condition CNN class list is exactly: Silk spot, Deburring, Factory new, and Rusty old.
+- A separate material CNN gates metal versus non-metal images before condition classification.
 - Theme defaults to the device setting and can be changed from Profile.
 
 ## Future integration points
 
 - Replace history and analytics `MockData` with a persistent inspection repository.
-- Connect gallery import to the same image preprocessing and ONNX inference service.
+- Replace the clearly labeled material-gate and four-condition mocks with validated ONNX exports.
 - Add result detail and manual review screens using the record handoff already exposed by History.
 - Add empty/error, camera-permission, and model-unavailable states.
 - Implement CSV/JSON file writing after platform storage policy is selected.

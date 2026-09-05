@@ -4,24 +4,25 @@ import 'package:metallens/app/metallens_app.dart';
 import 'package:metallens/services/model_config.dart';
 
 void main() {
-  test('ONNX contract preserves the approved five-class order', () {
+  test('ONNX contracts preserve the approved two-stage class order', () {
     expect(ModelConfig.inputName, 'input');
     expect(ModelConfig.outputName, 'logits');
     expect(ModelConfig.inputWidth, 64);
     expect(ModelConfig.inputHeight, 64);
     expect(ModelConfig.labels, const [
-      'Rolled pit',
-      'Inclusion',
       'Silk spot',
       'Deburring',
-      'Waist folding',
+      'Factory new',
+      'Rusty old',
     ]);
+    expect(ModelConfig.materialLabels, const ['Not metal', 'Metal']);
   });
 
   testWidgets('all four primary destinations are reachable', (tester) async {
     await tester.pumpWidget(const MetalLensApp());
     expect(find.text('MetalLens'), findsOneWidget);
     expect(find.text('Surface scan'), findsOneWidget);
+    expect(find.byTooltip('Choose an image'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('nav-history')));
     await tester.pumpAndSettle();
@@ -64,6 +65,13 @@ void main() {
         isNull,
         reason: '$destination must fit a 320 × 700 viewport',
       );
+      if (destination == 'analytics') {
+        expect(
+          tester.getSize(find.byKey(const ValueKey('activity-chart'))).width,
+          greaterThan(240),
+          reason: 'The daily chart must fill the analytics card width.',
+        );
+      }
     }
   });
 }

@@ -1,76 +1,92 @@
-# ONNX model integration
+# Model integration
 
-Last verified: 2026-09-03
+MetalLens now uses a two-stage on-device inspection pipeline. Camera captures
+and gallery images pass through exactly the same preprocessing and inference
+flow.
 
-## Bundled model
+## Pipeline
 
 ```text
-cnn_model/cnn_model_001_best.onnx
+Camera capture or gallery image
+              |
+              v
+      Metal / not-metal gate
+        |              |
+    not metal         metal
+        |              |
+  stop and explain     v
+               Four-class condition CNN
+                         |
+                         v
+        Silk spot / Deburring / Factory new / Rusty old
 ```
 
-- File size: 1,427,467 bytes
-- SHA-256: `13205ff4d08be93668512157db8b33e9a73d665afd675aee6c2eb8a64de7ebab`
-- Producer: PyTorch 2.11.0
-- ONNX IR version: 8
-- ONNX opset: 17
+The condition CNN is never run when a real material gate rejects an image.
 
-The model passed ONNX validation and a CPU zero-input inference during inspection.
+## Expected model files
 
-## Verified tensor contract
+| Purpose | Asset path | Output order |
+| --- | --- | --- |
+| Material gate | `cnn_model/material_gate/metal_or_not.onnx` | `Not metal`, `Metal` |
+| Condition classifier | `cnn_model/condition/condition_classifier.onnx` | `Silk spot`, `Deburring`, `Factory new`, `Rusty old` |
 
-| Direction | Name | Type | Shape | Meaning |
-| --- | --- | --- | --- | --- |
-| Input | `input` | float32 | `[batch, 3, 64, 64]` | NCHW image tensor |
-| Output | `logits` | float32 | `[batch, 5]` | Raw class logits |
+The previous `cnn_model/cnn_model_001_best.onnx` file has five incompatible
+outputs. It remains in the repository as a legacy artifact but is not used or
+relabelled by the new pipeline.
 
-The graph uses standard Conv, ReLU, MaxPool, AveragePool, Flatten, and Gemm operators.
+## Default tensor contract
 
-## Current preprocessing
+Until the new exports are inspected, both models are expected to use:
 
-1. Decode the captured JPEG.
-2. Apply encoded orientation.
-3. Center-crop the image to a square.
-4. Resize to 64 × 64 with linear interpolation.
-5. Read RGB channels.
-6. Convert each channel from 0–255 to float `[0, 1]`.
-7. Store values in NCHW order as `[1, 3, 64, 64]`.
+| Direction | Name | Type | Shape |
+| --- | --- | --- | --- |
+| Input | `input` | float32 | `[1, 3, 64, 64]` |
+| Output | `logits` | float32 | `[1, 2]` for the gate; `[1, 4]` for condition |
 
-Preprocessing runs in a Flutter isolate. ONNX Runtime executes the model asynchronously, and native input/output tensors are disposed after every run. The session is reused until the scanner is disposed.
+Preprocessing decodes the image, applies EXIF orientation, center-crops to a
+square, resizes to 64 x 64, converts to RGB CHW order, and normalizes channels
+to `[0, 1]`. Confirm all names, dimensions, class indices, and normalization
+against the training/export code before treating results as valid.
 
-## Current output decoding
+## Mock behavior
 
-The raw five logits are converted to probabilities with numerically stable softmax. The configured class order is:
+The model folders currently contain instructions but no new ONNX files.
 
-1. Rolled pit
-2. Inclusion
-3. Silk spot
-4. Deburring
-5. Waist folding
+- The mock material gate assumes a valid image is metal so the rest of the UX
+  can be exercised.
+- The mock condition stage produces deterministic placeholder probabilities
+  from simple color/edge statistics.
+- Result cards and sheets display `Mock pipeline`; mock output must never be
+  interpreted as a trained prediction.
+- If a compatible ONNX file exists at the expected path when the app is rebuilt,
+  the app attempts to load and use it automatically on the next launch.
 
-The model file does not contain class-label metadata. This ordering must be confirmed against training code.
+## Result policy
 
-If the highest probability is below 60%, the application marks the result Review. Otherwise it displays Defect predicted. The app does not derive Pass from this model because all five outputs are defect types.
+- A real material-gate confidence below the configured 60% metal threshold
+  stops condition analysis and reports that the image was not identified as
+  metal.
+- A top condition probability below 60% becomes `Review`.
+- `Factory new` at or above 60% becomes `Pass`.
+- `Silk spot`, `Deburring`, and `Rusty old` at or above 60% become `Defect`.
 
-## Runtime verification
+These thresholds are product defaults and require validation data before
+production deployment.
 
-An end-to-end test was completed on an Android 13 API 33 x86_64 emulator:
+## Image sources and rescanning
 
-- CameraX opened the configured virtual back camera.
-- The camera preview was verified center-cropped and full-screen without aspect-ratio letterboxing.
-- MetalLens captured the emulator virtual-scene frame.
-- The image was decoded, resized, and passed to the bundled ONNX model.
-- The result card and full five-class probability sheet were displayed.
-- One observed inference call completed in 13 ms.
-- Collected logs contained no fatal Flutter, ONNX Runtime, or ImageCapture exception.
+The result records whether bytes came from the camera or gallery. A selected
+gallery image is shown as the scanner background and can be analyzed repeatedly
+without reopening the picker. Camera captures can also be rerun from the result
+sheet. The app does not upload image bytes; preprocessing and inference remain
+on device.
 
-The virtual-scene prediction is not an accuracy test, and emulator latency is not representative of all physical phones.
+## Before enabling real results
 
-## Production checks still required
-
-- Confirm RGB versus BGR.
-- Confirm `[0, 1]` scaling versus mean/std normalization.
-- Confirm class-index order.
-- Validate predictions against labeled images from the training/validation pipeline.
-- Benchmark representative low-, mid-, and high-tier physical phones.
-- Define how a defect-free surface is recognized without adding a sixth CNN class.
-- Record model version and preprocessing version with every persisted inspection.
+1. Copy each ONNX file to its exact path above.
+2. Confirm the graph with an ONNX checker and a known validation sample.
+3. Verify input/output tensor names and shapes.
+4. Confirm class-index ordering from training code.
+5. Confirm RGB normalization and any mean/std normalization.
+6. Test metal and non-metal samples on physical Android and iOS devices.
+7. Record model versions and calibration metrics in persisted inspections.

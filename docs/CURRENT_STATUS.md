@@ -2,7 +2,7 @@
 
 Last reviewed: 2026-09-03
 
-MetalLens currently provides an interactive Flutter application for Android, iOS, and web. Android camera capture and local ONNX inference are connected and verified on an emulator. Historical records, analytics, persistence, export, and backend synchronization remain mocked or incomplete.
+MetalLens currently provides an interactive Flutter application for Android, iOS, and web. Camera capture and gallery selection now share a two-stage material/condition pipeline. The new ONNX exports are not yet supplied, so both stages visibly fall back to workflow-only mocks. Historical records, analytics, persistence, export, and backend synchronization remain mocked or incomplete.
 
 ## Working now
 
@@ -18,14 +18,16 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 ### Scanner
 
 - Full-screen, center-cropped live camera preview with immersive system UI, runtime permission handling, and unavailable/restricted states.
-- Cyan scanning focus guide and five-flaw status.
+- Cyan scanning focus guide and four-condition status.
 - Accessible capture, gallery, flashlight, settings, and help controls.
-- Physical or emulator-camera image capture.
+- Physical or emulator-camera image capture plus system gallery selection.
+- Selected gallery image preview and one-tap reanalysis without reopening the picker.
 - Center-crop, orientation correction, 64 × 64 RGB resize, and NCHW tensor preprocessing.
-- On-device ONNX Runtime inference with softmax decoding across all five flaw classes.
+- Two-stage flow: metal/not-metal gate followed by four-class condition analysis only for metal images.
+- ONNX drop-in support plus explicit mock fallbacks while the two new model files are absent.
 - Confidence-based Defect or Review status; low-confidence predictions are preserved.
 - Persistent latest-analysis card with prediction, confidence, and inference time.
-- Full result sheet with the captured thumbnail and all five class probabilities.
+- Full result sheet with source thumbnail, material decision, mock/real status, four condition probabilities, and rescan action.
 - Recent-inspections sheet can be dragged between compact and expanded positions.
 - Sheet uses approximately 25% surface opacity with background blur, leaving the camera area visible.
 
@@ -41,14 +43,14 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 
 - Seven-day and thirty-day ranges.
 - Total inspections, defect rate, and review count.
-- Daily inspection activity chart.
-- Distribution across all five approved flaw classes.
+- Daily inspection activity chart fills the card width with evenly spaced bars and readable weekday labels.
+- Distribution across all four approved condition classes.
 - Prototype-data labels distinguish mock values from future backend data.
 
 ### Profile
 
 - Inspector identity and model readiness summary.
-- Expandable list of all five CNN flaw classes.
+- Expandable list of all four CNN condition classes.
 - Editable confidence threshold.
 - Auto-save and scan-feedback toggles.
 - Light, dark, and system appearance selection.
@@ -59,34 +61,40 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 ## Mocked or placeholder behavior
 
 - `lib/data/mock_data.dart` supplies all inspection and analytics data.
-- Gallery selection is an integration marker only.
 - Flashlight control calls camera hardware but availability depends on the selected camera/emulator.
 - Settings are held in memory and reset when the process restarts.
 - Language selection changes its setting value but does not localize the interface yet.
 - Export selection does not write a file.
 - History detail is a prepared handoff rather than the final result-detail screen.
 - Captured inference results are not persisted into History yet.
-- Pass results cannot be inferred by this five-defect-class model alone.
+- The new model files are absent; current material and condition outputs are mock workflow values, not trained predictions.
 
-## Model assumptions requiring confirmation
+## Model contracts requiring confirmation
 
-- ONNX class indices use the approved order: Rolled pit, Inclusion, Silk spot, Deburring, Waist folding.
-- Camera pixels are RGB values normalized to `[0, 1]` without mean/std normalization.
-- A top probability below 60% becomes Review; at or above 60% becomes Defect.
+- Material output order is `Not metal`, `Metal`.
+- Condition output order is `Silk spot`, `Deburring`, `Factory new`, `Rusty old`.
+- Both models use 64 x 64 RGB pixels normalized to `[0, 1]` without mean/std normalization.
+- A top condition probability below 60% becomes Review. `Factory new` above threshold becomes Pass; the other three conditions become Defect.
 
-The ONNX file contains no label or preprocessing metadata, so these assumptions must be checked against the training code or validation samples before production use.
+These assumptions must be checked against both models' training code and validation samples before production use.
 
 ## Current validation
 
 - `flutter analyze` passes with no issues.
 - Widget tests cover all four destinations, history filtering, and navigation at 320 × 700 px.
-- Android debug APK compilation succeeds with camera and ONNX Runtime dependencies.
+- Android debug APK compilation succeeds with camera, gallery picker, and ONNX Runtime dependencies.
 - A physical-device test copy is stored at `test_apk/MetalLens-v0.1.0-build1-debug.apk`; installation notes and its SHA-256 checksum are in `test_apk/README.md`.
+- Android emulator verification completed on 2026-09-05 for the new workflow:
+  - Camera capture completed through the two-stage mock pipeline.
+  - The Android gallery picker opened and returned a selected image to MetalLens.
+  - The selected image appeared as the scanner preview and produced four condition scores.
+  - The result displayed `Gallery · Mock pipeline` rather than presenting placeholder output as real inference.
+  - `Analyze this gallery image again` completed without reopening the picker.
 - Android 13 API 33 x86_64 emulator verification completed on 2026-09-03:
   - CameraX opened the emulator back camera.
-  - Capture and ONNX inference completed end to end.
+  - The previous five-class capture and ONNX inference completed end to end before the model contract changed.
   - The observed inference call took 13 ms for the emulator frame.
-  - All five probabilities appeared in the result sheet.
+  - All five legacy probabilities appeared in the result sheet.
   - No fatal Flutter, ONNX, or image-capture errors appeared in collected logs.
 
 The 13 ms value is one emulator observation, not a production-device performance guarantee.

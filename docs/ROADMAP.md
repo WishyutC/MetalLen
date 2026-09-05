@@ -2,21 +2,22 @@
 
 This roadmap separates features currently running from future implementation. Current behavior is documented in [CURRENT_STATUS.md](CURRENT_STATUS.md).
 
-## Completed: camera and local model foundation
+## Completed: camera, gallery, and two-stage foundation
 
 - Camera permission states and recovery guidance.
 - Live camera preview, image capture, and flashlight control.
-- ONNX model asset loading and on-device five-class inference.
-- Image preprocessing and probability/result presentation.
+- Gallery image selection, preview, shared analysis, and rescan.
+- Two-stage metal gate then four-condition architecture with ONNX drop-in paths.
+- Explicit mock fallbacks, image preprocessing, and probability/result presentation.
 - Android emulator end-to-end verification.
 
 ## Next: complete the inspection workflow
 
-- Confirm label-index order and image normalization against model training code.
-- Connect gallery import to the existing inference service.
+- Supply and validate both new ONNX exports against their training code.
+- Confirm label-index order and image normalization for both models.
 - Add analysis cancellation and timeout handling.
 - Build Scan result detail with image, predicted flaw, confidence, class scores, model version, and metadata.
-- Build Manual review so uncertain predictions can be accepted, corrected among the five classes, or rejected.
+- Build Manual review so uncertain predictions can be accepted, corrected among the four condition classes, or rejected.
 
 ## Then: persistence and operational states
 

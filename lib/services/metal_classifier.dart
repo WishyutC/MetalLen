@@ -8,32 +8,50 @@ import '../models/inference_result.dart';
 import '../models/inspection.dart';
 import 'model_config.dart';
 
+/// Coordinates the material gate and the four-class condition classifier.
+///
+/// Missing ONNX assets intentionally fall back to visible mock behavior so the
+/// capture/gallery flow remains testable while models are being trained.
 class MetalClassifier {
   MetalClassifier({OnnxRuntime? runtime}) : _runtime = runtime ?? OnnxRuntime();
 
   final OnnxRuntime _runtime;
-  OrtSession? _session;
+  OrtSession? _materialSession;
+  OrtSession? _conditionSession;
+  bool _initialized = false;
 
-  bool get isReady => _session != null;
+  bool get isReady => _initialized;
+  bool get materialUsesMock => _materialSession == null;
+  bool get conditionUsesMock => _conditionSession == null;
 
   Future<void> initialize() async {
-    if (_session != null) return;
-    final session = await _runtime.createSessionFromAsset(
-      ModelConfig.assetPath,
-      options: OrtSessionOptions(intraOpNumThreads: 2, interOpNumThreads: 1),
-    );
-    if (!session.inputNames.contains(ModelConfig.inputName) ||
-        !session.outputNames.contains(ModelConfig.outputName)) {
-      await session.close();
-      throw StateError(
-        'Unexpected model contract. Expected input "${ModelConfig.inputName}" '
-        'and output "${ModelConfig.outputName}".',
-      );
-    }
-    _session = session;
+    if (_initialized) return;
+    _materialSession = await _tryCreateSession(ModelConfig.materialAssetPath);
+    _conditionSession = await _tryCreateSession(ModelConfig.conditionAssetPath);
+    _initialized = true;
   }
 
-  Future<InferenceResult> analyze(Uint8List encodedImage) async {
+  Future<OrtSession?> _tryCreateSession(String assetPath) async {
+    try {
+      final session = await _runtime.createSessionFromAsset(
+        assetPath,
+        options: OrtSessionOptions(intraOpNumThreads: 2, interOpNumThreads: 1),
+      );
+      if (!session.inputNames.contains(ModelConfig.inputName) ||
+          !session.outputNames.contains(ModelConfig.outputName)) {
+        await session.close();
+        return null;
+      }
+      return session;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<InferenceResult> analyze(
+    Uint8List encodedImage, {
+    required ScanImageSource source,
+  }) async {
     await initialize();
     final pixels = await compute(_preprocessImage, encodedImage);
     final input = await OrtValue.fromList(pixels, const [
@@ -42,38 +60,108 @@ class MetalClassifier {
       ModelConfig.inputHeight,
       ModelConfig.inputWidth,
     ]);
-    final stopwatch = Stopwatch()..start();
-    Map<String, OrtValue> outputs = const {};
+    final totalStopwatch = Stopwatch()..start();
     try {
-      outputs = await _session!.run({ModelConfig.inputName: input});
-      stopwatch.stop();
-      final logits = (await outputs[ModelConfig.outputName]!.asFlattenedList())
-          .cast<num>()
-          .map((value) => value.toDouble())
-          .toList(growable: false);
-      if (logits.length != ModelConfig.labels.length) {
-        throw StateError(
-          'Expected ${ModelConfig.labels.length} class logits, got ${logits.length}.',
+      final material = await _classifyMaterial(input);
+      if (!material.isMetal) {
+        totalStopwatch.stop();
+        return InferenceResult(
+          scores: const [],
+          inferenceTime: totalStopwatch.elapsed,
+          capturedImage: encodedImage,
+          status: InspectionStatus.review,
+          source: source,
+          material: material,
+          conditionUsesMock: false,
         );
       }
-      final probabilities = _softmax(logits);
-      final scores = List<ClassScore>.generate(
-        ModelConfig.labels.length,
-        (index) => ClassScore(
-          label: ModelConfig.labels[index],
-          probability: probabilities[index],
-        ),
-      )..sort((a, b) => b.probability.compareTo(a.probability));
+
+      final scores = await _classifyCondition(input, pixels);
+      totalStopwatch.stop();
+      final prediction = scores.first;
+      final status = prediction.probability < ModelConfig.reviewThreshold
+          ? InspectionStatus.review
+          : prediction.label == 'Factory new'
+              ? InspectionStatus.pass
+              : InspectionStatus.defect;
       return InferenceResult(
         scores: scores,
-        inferenceTime: stopwatch.elapsed,
+        inferenceTime: totalStopwatch.elapsed,
         capturedImage: encodedImage,
-        status: scores.first.probability >= ModelConfig.reviewThreshold
-            ? InspectionStatus.defect
-            : InspectionStatus.review,
+        status: status,
+        source: source,
+        material: material,
+        conditionUsesMock: conditionUsesMock,
       );
     } finally {
       await input.dispose();
+    }
+  }
+
+  Future<MaterialDecision> _classifyMaterial(OrtValue input) async {
+    final session = _materialSession;
+    if (session == null) {
+      return const MaterialDecision(
+        isMetal: true,
+        confidence: 0,
+        inferenceTime: Duration.zero,
+        usesMock: true,
+      );
+    }
+    final stopwatch = Stopwatch()..start();
+    final logits = await _run(session, input);
+    stopwatch.stop();
+    if (logits.length != ModelConfig.materialLabels.length) {
+      throw StateError(
+        'Expected ${ModelConfig.materialLabels.length} material logits, '
+        'got ${logits.length}.',
+      );
+    }
+    final probabilities = _softmax(logits);
+    final metalProbability = probabilities[1];
+    return MaterialDecision(
+      isMetal: metalProbability >= ModelConfig.materialThreshold,
+      confidence: metalProbability >= ModelConfig.materialThreshold
+          ? metalProbability
+          : probabilities[0],
+      inferenceTime: stopwatch.elapsed,
+      usesMock: false,
+    );
+  }
+
+  Future<List<ClassScore>> _classifyCondition(
+    OrtValue input,
+    Float32List pixels,
+  ) async {
+    final session = _conditionSession;
+    final logits = session == null
+        ? _mockConditionLogits(pixels)
+        : await _run(session, input);
+    if (logits.length != ModelConfig.conditionLabels.length) {
+      throw StateError(
+        'Expected ${ModelConfig.conditionLabels.length} condition logits, '
+        'got ${logits.length}.',
+      );
+    }
+    final probabilities = _softmax(logits);
+    return List<ClassScore>.generate(
+      ModelConfig.conditionLabels.length,
+      (index) => ClassScore(
+        label: ModelConfig.conditionLabels[index],
+        probability: probabilities[index],
+      ),
+    )..sort((a, b) => b.probability.compareTo(a.probability));
+  }
+
+  Future<List<double>> _run(OrtSession session, OrtValue input) async {
+    Map<String, OrtValue> outputs = const {};
+    try {
+      outputs = await session.run({ModelConfig.inputName: input});
+      return (await outputs[ModelConfig.outputName]!.asFlattenedList())
+          .cast<num>()
+          .map((value) => value.toDouble())
+          .toList(growable: false);
+    } finally {
       for (final output in outputs.values) {
         await output.dispose();
       }
@@ -81,9 +169,13 @@ class MetalClassifier {
   }
 
   Future<void> dispose() async {
-    final session = _session;
-    _session = null;
-    await session?.close();
+    final material = _materialSession;
+    final condition = _conditionSession;
+    _materialSession = null;
+    _conditionSession = null;
+    _initialized = false;
+    await material?.close();
+    await condition?.close();
   }
 
   static List<double> _softmax(List<double> logits) {
@@ -95,10 +187,42 @@ class MetalClassifier {
   }
 }
 
+List<double> _mockConditionLogits(Float32List pixels) {
+  final planeSize = ModelConfig.inputWidth * ModelConfig.inputHeight;
+  var meanR = 0.0;
+  var meanG = 0.0;
+  var meanB = 0.0;
+  var edge = 0.0;
+  for (var index = 0; index < planeSize; index++) {
+    meanR += pixels[index];
+    meanG += pixels[planeSize + index];
+    meanB += pixels[planeSize * 2 + index];
+    if (index % ModelConfig.inputWidth != 0) {
+      edge += (pixels[index] - pixels[index - 1]).abs();
+    }
+  }
+  meanR /= planeSize;
+  meanG /= planeSize;
+  meanB /= planeSize;
+  edge /= planeSize;
+  final brightest = math.max(meanR, math.max(meanG, meanB));
+  final darkest = math.min(meanR, math.min(meanG, meanB));
+  final neutrality = 1 - (brightest - darkest);
+  final brightness = (meanR + meanG + meanB) / 3;
+  final rustBias = math.max(0, meanR - (meanG + meanB) / 2);
+
+  return [
+    1.2 + edge * 6,
+    1.0 + edge * 9,
+    1.0 + brightness * 2 + neutrality,
+    1.0 + rustBias * 8 + (1 - brightness),
+  ];
+}
+
 Float32List _preprocessImage(Uint8List bytes) {
   final decoded = image_lib.decodeImage(bytes);
   if (decoded == null) {
-    throw const FormatException('The captured image could not be decoded.');
+    throw const FormatException('The selected image could not be decoded.');
   }
   final oriented = image_lib.bakeOrientation(decoded);
   final cropSize = math.min(oriented.width, oriented.height);

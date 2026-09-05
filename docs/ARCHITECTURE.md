@@ -23,7 +23,7 @@ lib/
 
 ## Data boundary
 
-`MockData` is deliberately separated from screen widgets and continues to supply prototype history and analytics. `MetalClassifier` owns ONNX session creation, image preprocessing, inference, softmax decoding, and native tensor disposal. `ScannerScreen` owns the camera lifecycle and calls the classifier after capture.
+`MockData` is deliberately separated from screen widgets and continues to supply prototype history and analytics. `MetalClassifier` coordinates the metal/not-metal gate and four-class condition model, owns shared image preprocessing, ONNX sessions, softmax decoding, mock fallbacks, and native tensor disposal. `ScannerScreen` owns camera/gallery selection and sends both sources through the same classifier flow.
 
 Production persistence should be added behind repository interfaces rather than adding storage or network calls directly to screen widgets.
 
@@ -35,21 +35,22 @@ UI screens
 Feature controller/state
     ↓
 Inspection repository
-    ├── Camera/image source (implemented for capture)
-    ├── CNN inference service (implemented with ONNX Runtime)
+    ├── Camera/gallery image source (implemented)
+    ├── Material gate (mock fallback; ONNX drop-in ready)
+    ├── Four-class condition service (mock fallback; ONNX drop-in ready)
     ├── Local inspection store
     └── Optional backend sync
 ```
 
-The inference result should retain all five class scores, selected prediction, model version, threshold, timestamp, source image reference, and review state. Application logic may derive Pass, Defect, or Review without changing the model's five-class output.
+The inference result retains its camera/gallery source, material decision, mock/real mode, four condition scores when applicable, selected prediction, timing, source bytes, and application status. A non-metal decision stops the pipeline before condition classification.
 
 ## State ownership today
 
 - Application theme: `MetalLensApp`
 - Selected destination: `MetalLensShell`
-- Scanner feedback and flashlight UI: `ScannerScreen`
+- Scanner feedback, gallery preview/rescan, and flashlight UI: `ScannerScreen`
 - Camera controller and lifecycle: `ScannerScreen`
-- ONNX session and preprocessing: `MetalClassifier`
+- Two-stage ONNX sessions, mock fallbacks, and preprocessing: `MetalClassifier`
 - Search and status filter: `HistoryScreen`
 - Analytics range: `AnalyticsScreen`
 - Profile settings: `ProfileScreen`

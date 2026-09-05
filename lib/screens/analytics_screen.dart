@@ -138,8 +138,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             title: 'Daily inspections',
             note: '${data.total} total',
             child: SizedBox(
+              width: double.infinity,
               height: 155,
               child: CustomPaint(
+                key: const ValueKey('activity-chart'),
                 painter: _ActivityChartPainter(
                   data.daily,
                   Theme.of(context).brightness,

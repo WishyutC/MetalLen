@@ -64,15 +64,16 @@ Build the Android debug APK:
 flutter build apk --debug
 ```
 
-## ONNX model asset
+## ONNX model assets
 
-The application bundles:
+Place validated exports at:
 
 ```text
-cnn_model/cnn_model_001_best.onnx
+cnn_model/material_gate/metal_or_not.onnx
+cnn_model/condition/condition_classifier.onnx
 ```
 
-If that file is replaced, confirm its input/output contract and update `lib/services/model_config.dart`. Do not assume another model uses the same dimensions, normalization, tensor names, or class-index order. See [MODEL_INTEGRATION.md](MODEL_INTEGRATION.md).
+The folder READMEs describe the assumed contracts. With either file absent or incompatible, the current app uses an explicitly labeled mock fallback. The old five-class `cnn_model_001_best.onnx` is retained only as a legacy artifact. Do not relabel its outputs. Confirm dimensions, normalization, tensor names, and class-index order for every replacement; see [MODEL_INTEGRATION.md](MODEL_INTEGRATION.md).
 
 ## Definition of done
 

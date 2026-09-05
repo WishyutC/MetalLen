@@ -9,7 +9,8 @@ This directory stores APK files intended for testing MetalLens on a physical And
 - Package ID: `com.metallens.metallens`
 - Build type: Debug
 - Launcher icon: MetalLens camera lens and metal-surface scan reticle, with Android adaptive and iOS multi-size support
-- SHA-256: `974719C6E42B36B3CCC44203B25557B91B1B4738160ABC9DB680A5446E304ECB`
+- Features: camera capture, gallery selection/rescan, and mock-ready two-stage material/condition pipeline
+- SHA-256: `D66D1725F1163E61F32A404D02D9B11CCB8540B76AACF4A38611AAF8D548A105`
 
 ## Install on a phone
 
