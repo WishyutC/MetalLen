@@ -1,6 +1,6 @@
 # Current app status
 
-Last reviewed: 2026-09-03
+Last reviewed: 2026-09-09
 
 MetalLens currently provides an interactive Flutter application for Android, iOS, and web. Camera capture and gallery selection now share a two-stage material/condition pipeline. The new ONNX exports are not yet supplied, so both stages visibly fall back to workflow-only mocks. Historical records, analytics, persistence, export, and backend synchronization remain mocked or incomplete.
 
@@ -17,6 +17,9 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 
 ### Scanner
 
+- Explicit scan button prevents accidental background-tap captures; in gallery mode it rescans the selected photo.
+- Results include accessible Choose photo and New camera scan actions, plus visible analysis progress.
+- Demo mode is announced before scanning, and simulated outputs are titled Demo result.
 - Full-screen, center-cropped live camera preview with immersive system UI, runtime permission handling, and unavailable/restricted states.
 - Cyan scanning focus guide and four-condition status.
 - Accessible capture, gallery, flashlight, settings, and help controls.

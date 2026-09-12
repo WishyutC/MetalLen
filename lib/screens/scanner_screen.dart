@@ -37,6 +37,24 @@ class _ScannerScreenState extends State<ScannerScreen>
   InferenceResult? _latestResult;
   Uint8List? _galleryPreview;
 
+  void _returnToCamera() {
+    if (_capturing) return;
+    setState(() {
+      _galleryPreview = null;
+      _latestResult = null;
+      _inferenceError = null;
+    });
+  }
+
+  Future<void> _scanCurrentImage() async {
+    final image = _galleryPreview;
+    if (image != null) {
+      await _analyzeImage(image, ScanImageSource.gallery);
+    } else {
+      await _capture();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -167,7 +185,10 @@ class _ScannerScreenState extends State<ScannerScreen>
       if (selected == null) return;
       final bytes = await selected.readAsBytes();
       if (!mounted) return;
-      setState(() => _galleryPreview = bytes);
+      setState(() {
+        _galleryPreview = bytes;
+        _latestResult = null;
+      });
       await _analyzeImage(
         bytes,
         ScanImageSource.gallery,
@@ -188,7 +209,7 @@ class _ScannerScreenState extends State<ScannerScreen>
     ScanImageSource source, {
     bool alreadyBusy = false,
   }) async {
-    if (_capturing && !alreadyBusy) return;
+    if (!mounted || (_capturing && !alreadyBusy)) return;
     if (!_modelReady) {
       await _initializeModel();
       if (!_modelReady) {
@@ -197,6 +218,7 @@ class _ScannerScreenState extends State<ScannerScreen>
         return;
       }
     }
+    if (!mounted) return;
     setState(() {
       _capturing = true;
       _inferenceError = null;
@@ -256,7 +278,7 @@ class _ScannerScreenState extends State<ScannerScreen>
     final result = _latestResult;
     if (result == null) {
       return _galleryPreview == null
-          ? 'Tap anywhere or press the button to scan'
+          ? 'Position the surface, then tap Scan'
           : 'Gallery image ready to analyze';
     }
     if (!result.isMetal) return 'Not identified as metal';
@@ -284,7 +306,8 @@ class _ScannerScreenState extends State<ScannerScreen>
       fit: StackFit.expand,
       children: [
         GestureDetector(
-          onTap: _capture,
+          // Captures require an explicit action to avoid accidental scans.
+          onTap: null,
           child: MetalSurface(
             child: Stack(
               fit: StackFit.expand,
@@ -329,9 +352,21 @@ class _ScannerScreenState extends State<ScannerScreen>
                                 height: constraints.maxHeight < 680 ? 12 : 42,
                               ),
                               _ScanMode(fromGallery: _galleryPreview != null),
+                              if (_modelReady &&
+                                  (_classifier.materialUsesMock ||
+                                      _classifier.conditionUsesMock))
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    'Demo mode · results are simulated',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        color: AppTokens.review, fontSize: 12),
+                                  ),
+                                ),
                               const Spacer(),
                               _FocusGuide(
-                                height: constraints.maxHeight < 680 ? 178 : 232,
+                                height: constraints.maxHeight < 680 ? 140 : 210,
                               ),
                               SizedBox(
                                 height: constraints.maxHeight < 680 ? 10 : 18,
@@ -358,7 +393,9 @@ class _ScannerScreenState extends State<ScannerScreen>
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Keep the surface flat and evenly lit',
+                                _galleryPreview == null
+                                    ? 'Use even lighting and avoid reflections'
+                                    : 'Rescan this photo or return to the camera',
                                 style: TextStyle(
                                   color: Colors.white.withValues(alpha: .68),
                                   fontSize: 12,
@@ -366,9 +403,13 @@ class _ScannerScreenState extends State<ScannerScreen>
                               ),
                               const Spacer(),
                               _CaptureControls(
-                                onCapture: _capture,
+                                onCapture: _scanCurrentImage,
                                 onGallery: _pickFromGallery,
-                                enabled: !_capturing && _camera != null,
+                                fromGallery: _galleryPreview != null,
+                                busy: _capturing,
+                                enabled: !_capturing &&
+                                    (_galleryPreview != null ||
+                                        _camera != null),
                                 galleryEnabled: !_capturing,
                               ),
                               SizedBox(
@@ -425,6 +466,28 @@ class _ScannerScreenState extends State<ScannerScreen>
                       ),
                     ),
                     const SizedBox(height: 14),
+                    if (_latestResult != null || _galleryPreview != null)
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _capturing ? null : _pickFromGallery,
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: const Text('Choose photo'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _capturing ? null : _returnToCamera,
+                            icon: const Icon(Icons.camera_alt_outlined),
+                            label: const Text('New camera scan'),
+                          ),
+                        ],
+                      ),
+                    if (_capturing)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: LinearProgressIndicator(
+                            semanticsLabel: 'Analyzing image'),
+                      ),
                     if (_latestResult != null) ...[
                       _LatestAnalysisCard(
                         result: _latestResult!,
@@ -436,7 +499,7 @@ class _ScannerScreenState extends State<ScannerScreen>
                       children: [
                         const Expanded(
                           child: Text(
-                            'Recent inspections',
+                            'Example inspections',
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
@@ -445,7 +508,7 @@ class _ScannerScreenState extends State<ScannerScreen>
                           ),
                         ),
                         Text(
-                          'Session 08 · 12 scans',
+                          'Demo data',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: .65),
                             fontSize: 12,
@@ -662,11 +725,15 @@ class _CaptureControls extends StatelessWidget {
     required this.onGallery,
     required this.enabled,
     required this.galleryEnabled,
+    required this.fromGallery,
+    required this.busy,
   });
   final VoidCallback onCapture;
   final VoidCallback onGallery;
   final bool enabled;
   final bool galleryEnabled;
+  final bool fromGallery;
+  final bool busy;
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 26),
@@ -680,7 +747,8 @@ class _CaptureControls extends StatelessWidget {
             ),
             Semantics(
               button: true,
-              label: 'Scan metal surface',
+              label:
+                  fromGallery ? 'Rescan selected photo' : 'Scan metal surface',
               child: InkWell(
                 onTap: enabled ? onCapture : null,
                 customBorder: const CircleBorder(),
@@ -707,6 +775,17 @@ class _CaptureControls extends StatelessWidget {
                       border:
                           Border.all(color: const Color(0xFF151A1D), width: 3),
                     ),
+                    child: busy
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            fromGallery
+                                ? Icons.refresh_rounded
+                                : Icons.camera_alt_outlined,
+                            color: AppTokens.accentContent,
+                          ),
                   ),
                 ),
               ),
@@ -719,7 +798,7 @@ class _CaptureControls extends StatelessWidget {
                 builder: (_) => const AlertDialog(
                   title: Text('Inspection guide'),
                   content: Text(
-                    'Keep the surface flat, clean, and evenly lit. Uncertain predictions will be marked for review.',
+                    'Fill the guide with the metal surface and avoid glare. Tap the camera button to scan, or choose a photo from your gallery. Demo results are simulated; uncertain model results need review.',
                   ),
                 ),
               ),
@@ -877,7 +956,7 @@ class _InferenceResultSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        statusLabel,
+                        result.usesAnyMock ? 'Demo result' : statusLabel,
                         style: TextStyle(
                           color: statusColor,
                           fontWeight: FontWeight.w800,
@@ -971,7 +1050,7 @@ class _InferenceResultSheet extends StatelessWidget {
               ),
               child: Text(
                 result.usesAnyMock
-                    ? 'Mock mode is active because one or both new ONNX files are absent. Use this result only to test the workflow.'
+                    ? 'This is a simulated result for trying the app. Trained models are needed for a real inspection.'
                     : isReview
                         ? 'Confidence is below ${(ModelConfig.reviewThreshold * 100).round()}%. Keep this result for manual review.'
                         : 'This is a model prediction, not a guaranteed finding. Confirm it during inspection.',
@@ -1051,13 +1130,15 @@ class _LatestAnalysisCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      notMetal
-                          ? 'Not metal'
-                          : review
-                              ? 'Needs review'
-                              : pass
-                                  ? 'Pass'
-                                  : 'Condition detected',
+                      result.usesAnyMock
+                          ? 'Demo result'
+                          : notMetal
+                              ? 'Not metal'
+                              : review
+                                  ? 'Needs review'
+                                  : pass
+                                      ? 'Pass'
+                                      : 'Condition detected',
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.w800,
@@ -1092,7 +1173,7 @@ class _LatestAnalysisCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${result.source == ScanImageSource.gallery ? 'Gallery' : 'Camera'} · ${result.usesAnyMock ? 'Mock pipeline' : 'On-device ONNX'} · ${result.inferenceTime.inMilliseconds} ms',
+                  '${result.source == ScanImageSource.gallery ? 'Gallery' : 'Camera'} · ${result.usesAnyMock ? 'Simulated result' : 'Analyzed on device'}',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: .62),
                     fontSize: 11,
@@ -1101,7 +1182,7 @@ class _LatestAnalysisCard extends StatelessWidget {
               ),
               TextButton(
                 onPressed: onDetails,
-                child: const Text('View all scores'),
+                child: const Text('Details & rescan'),
               ),
             ],
           ),

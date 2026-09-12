@@ -151,7 +151,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
           const SizedBox(height: 14),
           _SectionCard(
-            title: 'Flaws detected',
+            title: 'Surface conditions',
             note: '${MockData.flawClasses.length} classes',
             child: Column(
               children: data.distribution.entries.map((entry) {

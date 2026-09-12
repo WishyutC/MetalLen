@@ -10,7 +10,8 @@ This directory stores APK files intended for testing MetalLens on a physical And
 - Build type: Debug
 - Launcher icon: MetalLens camera lens and metal-surface scan reticle, with Android adaptive and iOS multi-size support
 - Features: camera capture, gallery selection/rescan, and mock-ready two-stage material/condition pipeline
-- SHA-256: `D66D1725F1163E61F32A404D02D9B11CCB8540B76AACF4A38611AAF8D548A105`
+- UX update (2026-09-09): explicit scan/rescan controls, new-photo and camera actions in results, clearer demo notices, and analysis progress.
+- SHA-256: `D5367D54E4F35C76B4EA8164DB64D5DC42662166C4E7A4FEE0DD977357F14AA6`
 
 ## Install on a phone
 
