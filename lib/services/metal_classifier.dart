@@ -8,7 +8,7 @@ import '../models/inference_result.dart';
 import '../models/inspection.dart';
 import 'model_config.dart';
 
-/// Coordinates the material gate and the four-class condition classifier.
+/// Coordinates the binary material gate and three-class condition classifier.
 ///
 /// Missing ONNX assets intentionally fall back to visible mock behavior so the
 /// capture/gallery flow remains testable while models are being trained.
@@ -81,9 +81,7 @@ class MetalClassifier {
       final prediction = scores.first;
       final status = prediction.probability < ModelConfig.reviewThreshold
           ? InspectionStatus.review
-          : prediction.label == 'Factory new'
-              ? InspectionStatus.pass
-              : InspectionStatus.defect;
+          : InspectionStatus.defect;
       return InferenceResult(
         scores: scores,
         inferenceTime: totalStopwatch.elapsed,
@@ -111,19 +109,18 @@ class MetalClassifier {
     final stopwatch = Stopwatch()..start();
     final logits = await _run(session, input);
     stopwatch.stop();
-    if (logits.length != ModelConfig.materialLabels.length) {
+    if (logits.length != 1) {
       throw StateError(
-        'Expected ${ModelConfig.materialLabels.length} material logits, '
+        'Expected one material logit, '
         'got ${logits.length}.',
       );
     }
-    final probabilities = _softmax(logits);
-    final metalProbability = probabilities[1];
+    final metalProbability = sigmoid(logits.single);
     return MaterialDecision(
       isMetal: metalProbability >= ModelConfig.materialThreshold,
       confidence: metalProbability >= ModelConfig.materialThreshold
           ? metalProbability
-          : probabilities[0],
+          : 1 - metalProbability,
       inferenceTime: stopwatch.elapsed,
       usesMock: false,
     );
@@ -185,6 +182,13 @@ class MetalClassifier {
     final sum = exponentials.reduce((a, b) => a + b);
     return exponentials.map((value) => value / sum).toList(growable: false);
   }
+
+  @visibleForTesting
+  static double sigmoid(double logit) {
+    if (logit >= 0) return 1 / (1 + math.exp(-logit));
+    final exponential = math.exp(logit);
+    return exponential / (1 + exponential);
+  }
 }
 
 List<double> _mockConditionLogits(Float32List pixels) {
@@ -205,17 +209,14 @@ List<double> _mockConditionLogits(Float32List pixels) {
   meanG /= planeSize;
   meanB /= planeSize;
   edge /= planeSize;
-  final brightest = math.max(meanR, math.max(meanG, meanB));
-  final darkest = math.min(meanR, math.min(meanG, meanB));
-  final neutrality = 1 - (brightest - darkest);
+  final channelSpread = math.max(meanR, math.max(meanG, meanB)) -
+      math.min(meanR, math.min(meanG, meanB));
   final brightness = (meanR + meanG + meanB) / 3;
-  final rustBias = math.max(0, meanR - (meanG + meanB) / 2);
 
   return [
-    1.2 + edge * 6,
-    1.0 + edge * 9,
-    1.0 + brightness * 2 + neutrality,
-    1.0 + rustBias * 8 + (1 - brightness),
+    1.0 + (1 - brightness) * 2 + channelSpread,
+    1.1 + channelSpread * 3,
+    1.0 + edge * 10,
   ];
 }
 

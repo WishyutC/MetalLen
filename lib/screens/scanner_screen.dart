@@ -916,21 +916,16 @@ class _InferenceResultSheet extends StatelessWidget {
     final prediction = result.prediction;
     final notMetal = !result.isMetal;
     final isReview = result.status == InspectionStatus.review;
-    final isPass = result.status == InspectionStatus.pass;
     final statusColor = notMetal
         ? Theme.of(context).colorScheme.onSurfaceVariant
         : isReview
             ? AppTokens.review
-            : isPass
-                ? AppTokens.pass
-                : AppTokens.defect;
+            : AppTokens.defect;
     final statusLabel = notMetal
         ? 'Not a metal surface'
         : isReview
             ? 'Needs review'
-            : isPass
-                ? 'Factory-new surface'
-                : 'Condition detected';
+            : 'Condition detected';
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
@@ -991,7 +986,7 @@ class _InferenceResultSheet extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              notMetal ? 'Condition pipeline' : 'Four-class probabilities',
+              notMetal ? 'Condition pipeline' : 'Condition probabilities',
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             if (notMetal)
@@ -1092,14 +1087,11 @@ class _LatestAnalysisCard extends StatelessWidget {
     final prediction = result.prediction;
     final notMetal = !result.isMetal;
     final review = result.status == InspectionStatus.review;
-    final pass = result.status == InspectionStatus.pass;
     final color = notMetal
         ? Colors.blueGrey
         : review
             ? AppTokens.review
-            : pass
-                ? AppTokens.pass
-                : AppTokens.defect;
+            : AppTokens.defect;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1119,9 +1111,7 @@ class _LatestAnalysisCard extends StatelessWidget {
                     ? Icons.block_rounded
                     : review
                         ? Icons.help_outline_rounded
-                        : pass
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.error_outline_rounded,
+                        : Icons.error_outline_rounded,
                 color: color,
               ),
               const SizedBox(width: 8),
@@ -1136,9 +1126,7 @@ class _LatestAnalysisCard extends StatelessWidget {
                               ? 'Not metal'
                               : review
                                   ? 'Needs review'
-                                  : pass
-                                      ? 'Pass'
-                                      : 'Condition detected',
+                                  : 'Condition detected',
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.w800,

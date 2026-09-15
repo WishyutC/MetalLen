@@ -7,17 +7,17 @@ This roadmap separates features currently running from future implementation. Cu
 - Camera permission states and recovery guidance.
 - Live camera preview, image capture, and flashlight control.
 - Gallery image selection, preview, shared analysis, and rescan.
-- Two-stage metal gate then four-condition architecture with ONNX drop-in paths.
+- Two-stage metal gate then three-condition architecture with ONNX v003 assets.
 - Explicit mock fallbacks, image preprocessing, and probability/result presentation.
 - Android emulator end-to-end verification.
 
 ## Next: complete the inspection workflow
 
-- Supply and validate both new ONNX exports against their training code.
+- Validate both ONNX v003 exports against their training code and validation data.
 - Confirm label-index order and image normalization for both models.
 - Add analysis cancellation and timeout handling.
 - Build Scan result detail with image, predicted flaw, confidence, class scores, model version, and metadata.
-- Build Manual review so uncertain predictions can be accepted, corrected among the four condition classes, or rejected.
+- Build Manual review so uncertain predictions can be accepted, corrected among the three condition classes, or rejected.
 
 ## Then: persistence and operational states
 

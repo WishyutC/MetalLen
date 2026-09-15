@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:metallens/app/metallens_app.dart';
+import 'package:metallens/services/metal_classifier.dart';
 import 'package:metallens/services/model_config.dart';
 
 void main() {
@@ -10,12 +11,21 @@ void main() {
     expect(ModelConfig.inputWidth, 64);
     expect(ModelConfig.inputHeight, 64);
     expect(ModelConfig.labels, const [
+      'Inclusion',
       'Silk spot',
-      'Deburring',
-      'Factory new',
-      'Rusty old',
+      'Scratch',
     ]);
+    expect(ModelConfig.conditionAssetPath,
+        'cnn_model/condition/cnn_model_003.onnx');
+    expect(ModelConfig.materialAssetPath,
+        'cnn_model/material_gate/ismetal_model_003.onnx');
     expect(ModelConfig.materialLabels, const ['Not metal', 'Metal']);
+  });
+
+  test('single material logit is decoded as a stable sigmoid probability', () {
+    expect(MetalClassifier.sigmoid(0), .5);
+    expect(MetalClassifier.sigmoid(1000), 1);
+    expect(MetalClassifier.sigmoid(-1000), 0);
   });
 
   testWidgets('all four primary destinations are reachable', (tester) async {

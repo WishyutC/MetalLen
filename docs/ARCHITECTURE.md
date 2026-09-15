@@ -23,7 +23,7 @@ lib/
 
 ## Data boundary
 
-`MockData` is deliberately separated from screen widgets and continues to supply prototype history and analytics. `MetalClassifier` coordinates the metal/not-metal gate and four-class condition model, owns shared image preprocessing, ONNX sessions, softmax decoding, mock fallbacks, and native tensor disposal. `ScannerScreen` owns camera/gallery selection and sends both sources through the same classifier flow.
+`MockData` is deliberately separated from screen widgets and continues to supply prototype history and analytics. `MetalClassifier` coordinates the metal/not-metal gate and three-class condition model, owns shared image preprocessing, ONNX sessions, sigmoid/softmax decoding, mock fallbacks, and native tensor disposal. `ScannerScreen` owns camera/gallery selection and sends both sources through the same classifier flow.
 
 Production persistence should be added behind repository interfaces rather than adding storage or network calls directly to screen widgets.
 
@@ -36,13 +36,13 @@ Feature controller/state
     ↓
 Inspection repository
     ├── Camera/gallery image source (implemented)
-    ├── Material gate (mock fallback; ONNX drop-in ready)
-    ├── Four-class condition service (mock fallback; ONNX drop-in ready)
+    ├── Material gate (ONNX v003; mock fallback)
+    ├── Three-class condition service (ONNX v003; mock fallback)
     ├── Local inspection store
     └── Optional backend sync
 ```
 
-The inference result retains its camera/gallery source, material decision, mock/real mode, four condition scores when applicable, selected prediction, timing, source bytes, and application status. A non-metal decision stops the pipeline before condition classification.
+The inference result retains its camera/gallery source, material decision, mock/real mode, three condition scores when applicable, selected prediction, timing, source bytes, and application status. A non-metal decision stops the pipeline before condition classification.
 
 ## State ownership today
 

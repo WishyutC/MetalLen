@@ -24,14 +24,14 @@ flutter run
 - Scanner is the initial destination and no separate Home screen exists.
 - Camera capture and gallery selection share an on-device two-stage inspection pipeline. Export, persistent settings, history storage, and backend synchronization remain integration points.
 - `Pass`, `Defect`, and `Review` are application result states—not CNN classes.
-- The condition CNN class list is exactly: Silk spot, Deburring, Factory new, and Rusty old.
+- The condition CNN class list is exactly: Inclusion, Silk spot, and Scratch.
 - A separate material CNN gates metal versus non-metal images before condition classification.
 - Theme defaults to the device setting and can be changed from Profile.
 
 ## Future integration points
 
 - Replace history and analytics `MockData` with a persistent inspection repository.
-- Replace the clearly labeled material-gate and four-condition mocks with validated ONNX exports.
+- Validate model accuracy and calibration on representative physical-device samples.
 - Add result detail and manual review screens using the record handoff already exposed by History.
 - Add empty/error, camera-permission, and model-unavailable states.
 - Implement CSV/JSON file writing after platform storage policy is selected.

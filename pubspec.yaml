@@ -22,6 +22,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - cnn_model/cnn_model_001_best.onnx
-    - cnn_model/condition/
-    - cnn_model/material_gate/
+    - cnn_model/condition/cnn_model_003.onnx
+    - cnn_model/material_gate/ismetal_model_003.onnx

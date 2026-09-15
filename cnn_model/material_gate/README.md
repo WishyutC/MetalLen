@@ -1,15 +1,14 @@
 # Metal material gate
 
-Copy the future ONNX model into this directory as:
+The app uses:
 
-`metal_or_not.onnx`
+`ismetal_model_003.onnx`
 
-Expected default contract:
+Verified graph contract:
 
 - Input: `input`, float32 `[1, 3, 64, 64]`, RGB normalized to `[0, 1]`
-- Output: `logits`, float32 `[1, 2]`
-- Class order: `Not metal`, `Metal`
+- Output: `logits`, float32 `[1, 1]`
+- Decoding: sigmoid; values at or above the configured threshold mean `Metal`
 
-Until that file is present, the gate is explicitly marked as mock and assumes a
-valid selected/captured image is metal. This keeps the gallery and rescan flow
-testable without presenting the mock decision as a trained prediction.
+If the file is unavailable or incompatible, the gate is explicitly marked as
+mock and assumes a valid selected/captured image is metal.

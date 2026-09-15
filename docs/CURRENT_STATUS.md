@@ -1,8 +1,8 @@
 # Current app status
 
-Last reviewed: 2026-09-09
+Last reviewed: 2026-09-15
 
-MetalLens currently provides an interactive Flutter application for Android, iOS, and web. Camera capture and gallery selection now share a two-stage material/condition pipeline. The new ONNX exports are not yet supplied, so both stages visibly fall back to workflow-only mocks. Historical records, analytics, persistence, export, and backend synchronization remain mocked or incomplete.
+MetalLens currently provides an interactive Flutter application for Android, iOS, and web. Camera capture and gallery selection share a two-stage material/condition pipeline using the supplied ONNX v003 models. Historical records, analytics, persistence, export, and backend synchronization remain mocked or incomplete.
 
 ## Working now
 
@@ -21,16 +21,18 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 - Results include accessible Choose photo and New camera scan actions, plus visible analysis progress.
 - Demo mode is announced before scanning, and simulated outputs are titled Demo result.
 - Full-screen, center-cropped live camera preview with immersive system UI, runtime permission handling, and unavailable/restricted states.
-- Cyan scanning focus guide and four-condition status.
+- Cyan scanning focus guide and three-condition status.
 - Accessible capture, gallery, flashlight, settings, and help controls.
 - Physical or emulator-camera image capture plus system gallery selection.
 - Selected gallery image preview and one-tap reanalysis without reopening the picker.
 - Center-crop, orientation correction, 64 × 64 RGB resize, and NCHW tensor preprocessing.
-- Two-stage flow: metal/not-metal gate followed by four-class condition analysis only for metal images.
-- ONNX drop-in support plus explicit mock fallbacks while the two new model files are absent.
+- Two-stage flow: single-logit metal/not-metal gate followed by three-class condition analysis only for metal images.
+- Active ONNX assets are `ismetal_model_003.onnx` and `cnn_model_003.onnx`; condition model 004 is stored but not loaded or bundled.
+- Stable sigmoid decoding for the binary gate and softmax decoding for the three condition logits.
+- Explicit mock fallbacks remain available if either active model cannot load.
 - Confidence-based Defect or Review status; low-confidence predictions are preserved.
 - Persistent latest-analysis card with prediction, confidence, and inference time.
-- Full result sheet with source thumbnail, material decision, mock/real status, four condition probabilities, and rescan action.
+- Full result sheet with source thumbnail, material decision, mock/real status, three condition probabilities, and rescan action.
 - Recent-inspections sheet can be dragged between compact and expanded positions.
 - Sheet uses approximately 25% surface opacity with background blur, leaving the camera area visible.
 
@@ -47,13 +49,13 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 - Seven-day and thirty-day ranges.
 - Total inspections, defect rate, and review count.
 - Daily inspection activity chart fills the card width with evenly spaced bars and readable weekday labels.
-- Distribution across all four approved condition classes.
+- Distribution across all three approved condition classes.
 - Prototype-data labels distinguish mock values from future backend data.
 
 ### Profile
 
 - Inspector identity and model readiness summary.
-- Expandable list of all four CNN condition classes.
+- Expandable list of all three CNN condition classes and active model version.
 - Editable confidence threshold.
 - Auto-save and scan-feedback toggles.
 - Light, dark, and system appearance selection.
@@ -70,14 +72,14 @@ MetalLens currently provides an interactive Flutter application for Android, iOS
 - Export selection does not write a file.
 - History detail is a prepared handoff rather than the final result-detail screen.
 - Captured inference results are not persisted into History yet.
-- The new model files are absent; current material and condition outputs are mock workflow values, not trained predictions.
+- Real-model accuracy is not yet validated against known samples on a physical device.
 
 ## Model contracts requiring confirmation
 
-- Material output order is `Not metal`, `Metal`.
-- Condition output order is `Silk spot`, `Deburring`, `Factory new`, `Rusty old`.
+- Material output is one logit, decoded with sigmoid under the assumption `1 = Metal`.
+- Condition output order is `Inclusion`, `Silk spot`, `Scratch`.
 - Both models use 64 x 64 RGB pixels normalized to `[0, 1]` without mean/std normalization.
-- A top condition probability below 60% becomes Review. `Factory new` above threshold becomes Pass; the other three conditions become Defect.
+- A top condition probability below 60% becomes Review; any of the three conditions above threshold becomes Defect. Pass is not a current CNN class.
 
 These assumptions must be checked against both models' training code and validation samples before production use.
 
@@ -85,8 +87,14 @@ These assumptions must be checked against both models' training code and validat
 
 - `flutter analyze` passes with no issues.
 - Widget tests cover all four destinations, history filtering, and navigation at 320 × 700 px.
-- Android debug APK compilation succeeds with camera, gallery picker, and ONNX Runtime dependencies.
+- Android debug APK compilation succeeds with camera, gallery picker, ONNX Runtime, and both selected v003 models.
+- APK inspection confirms that condition v003 and material v003 are bundled and condition v004 is excluded.
 - A physical-device test copy is stored at `test_apk/MetalLens-v0.1.0-build1-debug.apk`; installation notes and its SHA-256 checksum are in `test_apk/README.md`.
+- Android 10 API 29 x86 emulator verification completed on 2026-09-15:
+  - Both v003 ONNX sessions loaded; no mock-mode notice was shown.
+  - A camera frame completed the material gate and condition classifier end to end.
+  - The real result displayed `Scratch` with three-condition UI and `Analyzed on device`.
+  - The synthetic emulator-frame prediction is a runtime check, not an accuracy measurement.
 - Android emulator verification completed on 2026-09-05 for the new workflow:
   - Camera capture completed through the two-stage mock pipeline.
   - The Android gallery picker opened and returned a selected image to MetalLens.

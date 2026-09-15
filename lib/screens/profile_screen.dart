@@ -101,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             const Text(
-                              'Two-stage CNN · 4 conditions · Mock-ready',
+                              'Two-stage CNN · 3 conditions · Configured v003',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,

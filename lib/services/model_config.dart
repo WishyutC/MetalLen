@@ -1,11 +1,14 @@
 /// Contracts for the two-stage inspection pipeline.
 ///
-/// Both future models are expected to accept a 64 x 64 RGB NCHW float tensor
-/// normalized to [0, 1]. Update these values if the exported models differ.
+/// Both deployed models accept a 64 x 64 RGB NCHW float tensor normalized to
+/// [0, 1]. The material gate emits one binary logit; the condition model emits
+/// three logits in the approved class order below.
 abstract final class ModelConfig {
-  static const conditionAssetPath =
-      'cnn_model/condition/condition_classifier.onnx';
-  static const materialAssetPath = 'cnn_model/material_gate/metal_or_not.onnx';
+  static const conditionAssetPath = 'cnn_model/condition/cnn_model_003.onnx';
+  static const materialAssetPath =
+      'cnn_model/material_gate/ismetal_model_003.onnx';
+  static const conditionModelVersion = '003';
+  static const materialModelVersion = '003';
   static const inputName = 'input';
   static const outputName = 'logits';
   static const inputWidth = 64;
@@ -14,10 +17,9 @@ abstract final class ModelConfig {
   static const reviewThreshold = .60;
   static const materialThreshold = .60;
   static const conditionLabels = <String>[
+    'Inclusion',
     'Silk spot',
-    'Deburring',
-    'Factory new',
-    'Rusty old',
+    'Scratch',
   ];
   static const materialLabels = <String>['Not metal', 'Metal'];
 

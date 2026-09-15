@@ -69,11 +69,11 @@ flutter build apk --debug
 Place validated exports at:
 
 ```text
-cnn_model/material_gate/metal_or_not.onnx
-cnn_model/condition/condition_classifier.onnx
+cnn_model/material_gate/ismetal_model_003.onnx
+cnn_model/condition/cnn_model_003.onnx
 ```
 
-The folder READMEs describe the assumed contracts. With either file absent or incompatible, the current app uses an explicitly labeled mock fallback. The old five-class `cnn_model_001_best.onnx` is retained only as a legacy artifact. Do not relabel its outputs. Confirm dimensions, normalization, tensor names, and class-index order for every replacement; see [MODEL_INTEGRATION.md](MODEL_INTEGRATION.md).
+The folder READMEs describe the verified graph contracts. With either selected file absent or incompatible, the current app uses an explicitly labeled mock fallback. Condition model 004 is stored but intentionally not bundled or loaded. Confirm normalization and class-index order against training code for every replacement; see [MODEL_INTEGRATION.md](MODEL_INTEGRATION.md).
 
 ## Definition of done
 

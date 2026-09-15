@@ -3,16 +3,15 @@ import '../models/inspection.dart';
 /// Prototype-only data. Replace this repository at the backend/CNN boundary.
 abstract final class MockData {
   static const flawClasses = <String>[
+    'Inclusion',
     'Silk spot',
-    'Deburring',
-    'Factory new',
-    'Rusty old',
+    'Scratch',
   ];
 
   static const inspections = <Inspection>[
     Inspection(
       partId: 'Sheet A-1042',
-      flaw: 'Rusty old',
+      flaw: 'Scratch',
       time: '14:32',
       line: 'Line 2',
       confidence: 87,
@@ -21,7 +20,7 @@ abstract final class MockData {
     ),
     Inspection(
       partId: 'Sheet A-1041',
-      flaw: 'Factory new',
+      flaw: 'No condition detected',
       time: '14:26',
       line: 'Line 2',
       confidence: null,
@@ -39,7 +38,7 @@ abstract final class MockData {
     ),
     Inspection(
       partId: 'Coil B-882',
-      flaw: 'Deburring',
+      flaw: 'Inclusion',
       time: '17:42',
       line: 'Line 1',
       confidence: 92,
@@ -48,7 +47,7 @@ abstract final class MockData {
     ),
     Inspection(
       partId: 'Coil B-881',
-      flaw: 'Factory new',
+      flaw: 'No condition detected',
       time: '17:31',
       line: 'Line 1',
       confidence: null,
@@ -63,10 +62,9 @@ abstract final class MockData {
     reviewCount: 7,
     daily: [12, 19, 14, 23, 18, 21, 17],
     distribution: {
+      'Inclusion': 7,
       'Silk spot': 4,
-      'Deburring': 3,
-      'Factory new': 9,
-      'Rusty old': 7,
+      'Scratch': 12,
     },
   );
 
@@ -107,10 +105,9 @@ abstract final class MockData {
       22,
     ],
     distribution: {
+      'Inclusion': 32,
       'Silk spot': 19,
-      'Deburring': 17,
-      'Factory new': 41,
-      'Rusty old': 26,
+      'Scratch': 52,
     },
   );
 }
